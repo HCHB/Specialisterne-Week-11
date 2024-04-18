@@ -13,6 +13,11 @@ class LinkReader:
         self._dataframe = dataframe
         return dataframe
 
+    def filter(self, columns, filenames, overwrite=False):
+        self.filter_links(columns)
+        if not overwrite:
+            self.filter_paths(filenames)
+
     def filter_links(self, columns):
         non_empty_mask = ~self._dataframe[columns].isnull().all(axis=1)
         self._dataframe = self._dataframe[non_empty_mask]
