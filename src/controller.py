@@ -2,6 +2,8 @@ import glob
 import os
 from concurrent.futures import ThreadPoolExecutor
 import concurrent
+import argparse
+
 
 from src.download_summary import DownloadSummary
 from src.link_reader import LinkReader
@@ -11,29 +13,103 @@ from src.pdf_downloader import PDFDownloader
 
 class Controller:
     def __init__(self):
+        args = self._read_arguments()
+
         self._config = {}
 
-        self._pool_size = 50     # TODO Adjust value
-        self._overwrite_reports = True  # TODO toggle
+        self._pool_size = args.threadpool_size
+        self._overwrite_reports = args.report_overwrite
+        self._meta_save_rate = args.meta_save_rate
+        self._download_timeout = args.request_timeout
 
         self._config['Execution'] = {
             'threadpool size': self._pool_size,
-            'overwrite reports': self._overwrite_reports
+            'overwrite reports': self._overwrite_reports,
+            'meta save rate': self._meta_save_rate,
+            'download timeout': self._download_timeout
         }
 
-        self._init_source()
-        self._init_meta()
-        self._init_downloader()
-        self._init_summarizer()
+        self._init_source(args)
+        self._init_meta(args)
+        self._init_downloader(args)
+        self._init_summarizer(args)
 
+        from pprint import pprint
+        pprint(self._config)
 
-    def _init_source(self):
+    def _read_arguments(self):
+        parser = argparse.ArgumentParser(description='A script for taking links from a excel file and downloading pdf '
+                                                     'reports from the internet')
+
+        # Execution arguments
+        parser.add_argument('-ew', '--report_overwrite', action='store_true',
+                            default=False,
+                            help='Overwrite existing reports')
+        parser.add_argument('-ep', '--threadpool_size', nargs='?', type=int,
+                            default=100,
+                            help='The amount of threads dedicated to downloading reports')
+        parser.add_argument('-es', '--meta_save_rate', nargs='?', type=int,
+                            default=100,
+                            help='Number of attempted downloads before saving to the meta file')
+        parser.add_argument('-et', '--request_timeout', nargs='?', type=int,
+                            default=10,
+                            help='Seconds before timing out a http request')
+
+        # Source arguments
+        parser.add_argument('-lf', '--link_source', nargs='?', type=str,
+                            default=r'./data/GRI_2017_2020 (1).xlsx',
+                            help='File path for the link source')
+        parser.add_argument('-ls', '--link_sheet', nargs='?', type=str,
+                            default='0',
+                            help='Sheet name in the link source file')
+        parser.add_argument('-li', '--link_id_column', nargs='?', type=str,
+                            default='BRnum',
+                            help='ID column name in the link source file')
+        parser.add_argument('-lc', '--link_columns', nargs='*', type=str,
+                            default=['Pdf_URL', 'Report Html Address'],
+                            help='A list of column names where the download links in the link source file')
+
+        # Meta file arguments
+        parser.add_argument('-mf', '--meta_source', nargs='?', type=str,
+                            default=r'./data/Metadata2024.xlsx',
+                            help='File path for the meta file')
+        parser.add_argument('-ms', '--meta_sheet', nargs='?', type=str,
+                            default='0',
+                            help='Sheet name in the meta file')
+        parser.add_argument('-mc', '--meta_success_column', nargs='?', type=str,
+                            default='pdf_downloaded',
+                            help='The column name in the meta file where download success is written')
+
+        # Download arguments
+        parser.add_argument('-df', '--download_folder', nargs='?', type=str,
+                            default=r'./data/Reports',
+                            help='Folder path for where to save reports')
+        parser.add_argument('-dt', '--download_type', nargs='?', type=str,
+                            default='pdf',
+                            help='The expected report file type')
+
+        # Summarizer arguments
+        parser.add_argument('-sud', '--verbose_downloads', action='store_true',
+                            default=False,
+                            help='Boolean for if the download summary should write all the downloaded IDs')
+        parser.add_argument('-suf', '--verbose_failures', action='store_true',
+                            default=False,
+                            help='Boolean for if the download summary should write all the failed IDs')
+
+        try:
+            args = parser.parse_args()
+        except SystemExit as e:
+            parser.print_help()
+            exit(e.code)
+
+        return args
+
+    def _init_source(self, args):
         self._link_reader = LinkReader()
-        self._link_source = r'C:\Users\KOM\PycharmProjects\Week 11 - Exercise\data\GRI_2017_2020_test.xlsx'
-        # self._link_source = r'C:\Users\KOM\Documents\My documents\Week 11 - Exercise\Data\GRI_2017_2020 (1).xlsx'
-        self._link_sheet_name = '0'
-        self._IDColumn = 'BRnum'
-        self._link_columns = ['Pdf_URL', 'Report Html Address']
+        self._link_source = args.link_source
+        self._link_sheet_name = args.link_sheet
+        self._IDColumn = args.link_id_column
+        self._link_columns = args.link_columns
 
         self._config['Link source'] = {
             'file': self._link_source,
@@ -42,11 +118,11 @@ class Controller:
             'link columns': self._link_columns
         }
 
-    def _init_meta(self):
+    def _init_meta(self, args):
         self._meta_writer = MetaWriter()
-        self._meta_path = r'C:\Users\KOM\PycharmProjects\Week 11 - Exercise\data\Metadata2024.xlsx'
-        self._meta_sheet_name = '0'
-        self._download_success_column = 'pdf_downloaded'
+        self._meta_path = args.meta_source
+        self._meta_sheet_name = args.meta_sheet
+        self._download_success_column = args.meta_success_column
         self._meta_writer.open_sheet(self._meta_path, self._meta_sheet_name, index=self._IDColumn)
 
         self._config['Meta file'] = {
@@ -55,19 +131,19 @@ class Controller:
             'success column': self._download_success_column
         }
 
-    def _init_downloader(self):
-        self._downloader = PDFDownloader()
-        self._report_path = r'C:\Users\KOM\PycharmProjects\Week 11 - Exercise\data\Reports'
-        self._report_type = 'pdf'
+    def _init_downloader(self, args):
+        self._downloader = PDFDownloader(timeout=self._download_timeout)
+        self._report_path = args.download_folder
+        self._report_type = args.download_type
 
         self._config['Downloader'] = {
             'download path': self._report_path,
             'report type': self._report_type,
         }
 
-    def _init_summarizer(self):
-        self._verbose_downloads = False
-        self._verbose_failures = False
+    def _init_summarizer(self, args):
+        self._verbose_downloads = args.verbose_downloads
+        self._verbose_failures = args.verbose_failures
 
         self._config['Summary'] = {
             'verbose downloads': self._verbose_downloads,
@@ -95,7 +171,7 @@ class Controller:
         rows = self._link_reader.get_values()
 
         # Download reports
-        self._download_reports(rows)
+        self._download_reports(rows, self._meta_save_rate)
 
         # Ensure that metafile dataframe is saved
         self._meta_writer.write()
@@ -111,7 +187,7 @@ class Controller:
             for future in concurrent.futures.as_completed(futures):
                 count += 1
                 success, index, download_result = future.result()
-                print(f'{index}: {download_result}')  # TODO remove print
+                # print(f'{index}: {download_result}')  # TODO remove print
 
                 self._meta_writer.add_value(index, column_name=self._download_success_column, value=download_result)
                 self._summarizer.add_download(index, success)
@@ -149,7 +225,6 @@ class Controller:
         filepath = f'{self._report_path}/{index}.{self._report_type}'
 
         success = self._downloader.download(url=url, filepath=filepath)
-
         return success
 
     def _get_existing_files(self, path, filetype):
