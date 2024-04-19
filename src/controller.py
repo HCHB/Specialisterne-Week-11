@@ -199,7 +199,6 @@ class Controller:
             for future in concurrent.futures.as_completed(futures):
                 count += 1
                 success, index, download_result = future.result()
-                # print(f'{index}: {download_result}')  # TODO remove print
 
                 self._meta_writer.add_value(index, column_name=self._download_success_column, value=download_result)
                 self._summarizer.add_download(index, success)
