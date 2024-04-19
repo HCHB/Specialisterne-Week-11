@@ -1,4 +1,21 @@
-Commandline args
+How to setup:
+
+	Open cmd in the main project folder and run
+
+	python -m venv <path to venv>
+	<path to venv>\Scrupts\activate
+	pip install -r requirements.txt
+	deactivate
+
+How to run:
+
+	Open cmd in the main project folder and run
+
+	<path to venv>\Scrupts\activate
+	python -m src.controller
+	deactivate
+
+Commandline args for the PDF download script
 
     Exercise> python -m src.controller --help
     usage: controller.py [-h] [-ew] [-ep [THREADPOOL_SIZE]] [-es [META_SAVE_RATE]] [-lf [LINK_SOURCE]] [-ls [LINK_SHEET]]
