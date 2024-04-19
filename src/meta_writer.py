@@ -18,6 +18,9 @@ class MetaWriter:
         else:
             self._dataframe.loc[index] = pandas.Series({column_name: value})
 
-    def write(self):
+    def write(self, sort=False):
+        if sort:
+            self._dataframe.sort_index(inplace=True)
+
         with pandas.ExcelWriter(self._path, mode='a', engine='openpyxl', if_sheet_exists='overlay') as writer:
             self._dataframe.to_excel(writer, sheet_name=self._sheet, index=True)

@@ -20,13 +20,11 @@ class Controller:
         self._pool_size = args.threadpool_size
         self._overwrite_reports = args.report_overwrite
         self._meta_save_rate = args.meta_save_rate
-        self._download_timeout = args.request_timeout
 
         self._config['Execution'] = {
             'threadpool size': self._pool_size,
             'overwrite reports': self._overwrite_reports,
-            'meta save rate': self._meta_save_rate,
-            'download timeout': self._download_timeout
+            'meta save rate': self._meta_save_rate
         }
 
         self._init_source(args)
@@ -51,9 +49,6 @@ class Controller:
         parser.add_argument('-es', '--meta_save_rate', nargs='?', type=int,
                             default=100,
                             help='Number of attempted downloads before saving to the meta file')
-        parser.add_argument('-et', '--request_timeout', nargs='?', type=int,
-                            default=10,
-                            help='Seconds before timing out a http request')
 
         # Source arguments
         parser.add_argument('-lf', '--link_source', nargs='?', type=str,
@@ -67,7 +62,7 @@ class Controller:
                             help='ID column name in the link source file')
         parser.add_argument('-lc', '--link_columns', nargs='*', type=str,
                             default=['Pdf_URL', 'Report Html Address'],
-                            help='A list of column names where the download links in the link source file')
+                            help='A list of column names where the download links are in the link source file')
 
         # Meta file arguments
         parser.add_argument('-mf', '--meta_source', nargs='?', type=str,
@@ -79,27 +74,37 @@ class Controller:
         parser.add_argument('-mc', '--meta_success_column', nargs='?', type=str,
                             default='pdf_downloaded',
                             help='The column name in the meta file where download success is written')
+        parser.add_argument('-mo', '--sort_metadata', action='store_true',
+                            default=True,
+                            help='Sort the metadata at the end of the execution')
 
         # Download arguments
         parser.add_argument('-df', '--download_folder', nargs='?', type=str,
                             default=r'./data/Reports',
                             help='Folder path for where to save reports')
-        parser.add_argument('-dt', '--download_type', nargs='?', type=str,
+        parser.add_argument('-dty', '--download_type', nargs='?', type=str,
                             default='pdf',
                             help='The expected report file type')
+        parser.add_argument('-dti', '--request_timeout', nargs='?', type=int,
+                            default=10,
+                            help='Seconds before timing out a http request')
+        parser.add_argument('-dc', '--request_chunksize', nargs='?', type=int,
+                            default=8192,
+                            help='The chunk size that are gathered from the http request before writing it to the file')
 
         # Summarizer arguments
-        parser.add_argument('-sud', '--verbose_downloads', action='store_true',
+        parser.add_argument('-sd', '--verbose_downloads', action='store_true',
                             default=False,
                             help='Boolean for if the download summary should write all the downloaded IDs')
-        parser.add_argument('-suf', '--verbose_failures', action='store_true',
+        parser.add_argument('-sf', '--verbose_failures', action='store_true',
                             default=False,
                             help='Boolean for if the download summary should write all the failed IDs')
 
         try:
             args = parser.parse_args()
         except SystemExit as e:
-            parser.print_help()
+            if e.code != 0:
+                parser.print_help()
             exit(e.code)
 
         return args
@@ -123,22 +128,29 @@ class Controller:
         self._meta_path = args.meta_source
         self._meta_sheet_name = args.meta_sheet
         self._download_success_column = args.meta_success_column
+        self._sort_metadata = args.sort_metadata
         self._meta_writer.open_sheet(self._meta_path, self._meta_sheet_name, index=self._IDColumn)
 
         self._config['Meta file'] = {
             'file': self._meta_path,
             'sheet': self._meta_sheet_name,
-            'success column': self._download_success_column
+            'success column': self._download_success_column,
+            'sort': self._sort_metadata
         }
 
     def _init_downloader(self, args):
-        self._downloader = PDFDownloader(timeout=self._download_timeout)
+        self._download_timeout = args.request_timeout
+        self._download_chunk_size = args.request_chunksize
+
+        self._downloader = PDFDownloader(timeout=self._download_timeout, chunk_size=self._download_chunk_size)
         self._report_path = args.download_folder
         self._report_type = args.download_type
 
         self._config['Downloader'] = {
             'download path': self._report_path,
             'report type': self._report_type,
+            'download timeout': self._download_timeout,
+            'download chunk size': self._download_chunk_size
         }
 
     def _init_summarizer(self, args):
@@ -174,7 +186,7 @@ class Controller:
         self._download_reports(rows, self._meta_save_rate)
 
         # Ensure that metafile dataframe is saved
-        self._meta_writer.write()
+        self._meta_writer.write(sort=self._sort_metadata)
 
         # Write summary
         self._summarizer.save()
