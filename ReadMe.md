@@ -3,7 +3,7 @@ How to setup:
 	Open cmd in the main project folder and run
 
 	python -m venv <path to venv>
-	<path to venv>\Scrupts\activate
+	<path to venv>\Scripts\activate
 	pip install -r requirements.txt
 	deactivate
 
@@ -11,7 +11,7 @@ How to run:
 
 	Open cmd in the main project folder and run
 
-	<path to venv>\Scrupts\activate
+	<path to venv>\Scripts\activate
 	python -m src.controller
 	deactivate
 
